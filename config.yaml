@@ -1,0 +1,91 @@
+# Trading Configuration
+trading:
+  capital_allocation: 0.5  # Use 50% of available capital
+  buy_threshold: -0.01     # Buy if price drops 1% from previous close
+  sell_target: 0.02        # Sell at 2% profit
+  stop_loss: -0.05         # Alert (not auto-sell) at 5% loss
+  auto_sell_on_loss: false # Don't auto-sell on loss, only alert
+  
+# ETF List (NSE)
+etfs:
+  - "NIFTYBEES"    # Nippon India ETF Nifty BeES
+  - "JUNIORBEES"   # Nippon India ETF Nifty Junior BeES
+  - "BANKBEES"     # Nippon India ETF Bank BeES
+  - "LIQUIDBEES"   # Nippon India ETF Liquid BeES
+  - "GOLDBEES"     # Nippon India ETF Gold BeES
+
+# Broker API Configuration
+broker:
+  name: "zerodha"  # Options: zerodha, upstox, angelone, mock
+  api_key: "${BROKER_API_KEY}"
+  secret_key: "${BROKER_SECRET_KEY}"
+  user_id: "${BROKER_USER_ID}"
+  password: "${BROKER_PASSWORD}"
+  redirect_url: "${BROKER_REDIRECT_URL}"
+
+# Data Sources
+data:
+  primary_source: "truedata"  # Options: yfinance, truedata
+  
+  # TrueData Configuration (Premium NSE Live Data)
+  truedata_api_key: "${TRUEDATA_API_KEY}"
+  truedata_username: "${TRUEDATA_USERNAME}"
+  truedata_password: "${TRUEDATA_PASSWORD}"
+  
+  # Fallback configuration
+  nse_api_key: "${NSE_API_KEY}"
+  update_interval: 60  # seconds
+  
+# Database Configuration
+database:
+  type: "sqlite"  # Options: sqlite, postgresql
+  host: "localhost"
+  port: 5432
+  name: "etf_trading"
+  user: "${DB_USER}"
+  password: "${DB_PASSWORD}"
+
+# Notifications
+notifications:
+  email:
+    enabled: true
+    smtp_server: "smtp.gmail.com"
+    smtp_port: 587
+    username: "${EMAIL_USERNAME}"
+    password: "${EMAIL_PASSWORD}"
+    recipients:
+      - "trader@example.com"
+  
+  whatsapp:
+    enabled: false
+    twilio_sid: "${TWILIO_SID}"
+    twilio_token: "${TWILIO_TOKEN}"
+    from_number: "${TWILIO_PHONE}"
+    to_numbers:
+      - "+91XXXXXXXXXX"
+
+# Risk Management
+risk:
+  max_positions: 5
+  max_daily_loss: -0.05  # 5% daily loss limit
+  position_size_limit: 0.2  # Max 20% per position
+
+# ML Configuration
+ml:
+  enabled: false  # Enable in phase 2
+  model_type: "lstm"  # Options: lstm, prophet, arima
+  prediction_horizon: 5  # days
+  retrain_interval: 7  # days
+
+# Logging
+logging:
+  level: "INFO"
+  file: "logs/trading.log"
+  max_size: "10MB"
+  backup_count: 5
+
+# Trading Hours (IST)
+trading_hours:
+  start: "09:15"
+  end: "15:30"
+  timezone: "Asia/Kolkata"

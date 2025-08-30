@@ -1,0 +1,40 @@
+# Core Flask web framework
+flask==3.0.0
+flask-socketio==5.3.6
+
+# Essential utilities
+python-dotenv>=0.19.0
+requests>=2.28.0
+pyyaml>=6.0.0
+
+# Database integration
+supabase==2.18.1
+pyjwt==2.10.1
+
+# Trading and API integration
+kiteconnect>=4.0.0
+
+# Critical Missing Dependencies - FIXED
+pandas>=1.5.0
+numpy>=1.21.0
+yfinance>=0.2.0
+websocket-client>=1.4.0
+sqlalchemy>=1.4.0
+
+# Machine Learning (Basic)
+scikit-learn>=1.1.0
+ta>=0.10.0
+
+# Technical Analysis
+TA-Lib>=0.4.24
+
+# Additional ML Dependencies (Optional but recommended)
+xgboost>=1.6.0
+lightgbm>=3.3.0
+joblib>=1.2.0
+
+# WebSocket support
+websockets>=11.0.0
+
+# Built-in Python modules (no install needed):
+# - os, sys, json, time, threading, datetime, typing, logging, pathlib, sqlite3
