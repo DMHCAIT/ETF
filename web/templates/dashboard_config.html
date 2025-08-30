@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETF Trading Dashboard - Configuration Panel</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%);
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .price-up { color: #10b981; background-color: rgba(16, 185, 129, 0.1); }
+        .price-down { color: #ef4444; background-color: rgba(239, 68, 68, 0.1); }
+        .price-neutral { color: #6b7280; background-color: rgba(107, 114, 128, 0.1); }
+        .config-panel { background: linear-gradient(145deg, #f8fafc 0%, #e2e8f0 100%); }
+        .parameter-card { 
+            background: white; 
+            border: 2px solid #e2e8f0; 
+            transition: all 0.3s ease;
+        }
+        .parameter-card:hover { border-color: #3b82f6; }
+        .slider {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            border-radius: 3px;
+            background: #e2e8f0;
+            outline: none;
+            transition: background 0.3s;
+        }
+        .slider:hover { background: #cbd5e1; }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .slider::-webkit-slider-thumb:hover { background: #2563eb; }
+        .tab-button { 
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+        }
+        .tab-button.active { 
+            background: white; 
+            border-bottom-color: #3b82f6;
+            color: #1e40af;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    
+    <!-- Header -->
+    <header class="gradient-header text-white shadow-xl">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="bg-white bg-opacity-20 p-3 rounded-lg">
+                        <i class="fas fa-cogs text-2xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold">ETF Trading Dashboard</h1>
+                        <p class="text-blue-100">Real-time Configuration & Control</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-6">
+                    <!-- System Status -->
+                    <div class="text-center">
+                        <div id="systemStatus" class="text-lg font-bold">System Active</div>
+                        <div id="lastUpdate" class="text-xs text-blue-200">Updated: Just now</div>
+                    </div>
+                    
+                    <!-- Connection Status -->
+                    <div class="flex items-center space-x-2">
+                        <div id="connectionDot" class="w-3 h-3 bg-green-400 rounded-full pulse-dot"></div>
+                        <span id="connectionStatus" class="text-sm">Connected</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <div class="bg-white shadow-sm">
+        <div class="container mx-auto px-6">
+            <div class="flex space-x-0">
+                <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-button active px-6 py-4 text-sm font-medium">
+                    <i class="fas fa-chart-line mr-2"></i>Dashboard
+                </button>
+                <button onclick="switchTab('config')" id="tab-config" class="tab-button px-6 py-4 text-sm font-medium text-gray-600 hover:text-gray-900">
+                    <i class="fas fa-cogs mr-2"></i>Configuration
+                </button>
+                <button onclick="switchTab('trades')" id="tab-trades" class="tab-button px-6 py-4 text-sm font-medium text-gray-600 hover:text-gray-900">
+                    <i class="fas fa-exchange-alt mr-2"></i>Live Trading
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container mx-auto px-6 py-8">
+        
+        <!-- Dashboard Tab -->
+        <div id="content-dashboard" class="tab-content">
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-xl p-6 shadow-sm card-hover">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600">Portfolio Value</p>
+                            <p id="portfolioValue" class="text-2xl font-bold text-gray-900">₹3,26,707</p>
+                        </div>
+                        <div class="bg-blue-100 p-3 rounded-lg">
+                            <i class="fas fa-wallet text-blue-600"></i>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <span id="portfolioChange" class="text-sm text-green-600">+₹1,234 (0.38%)</span>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-6 shadow-sm card-hover">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600">Daily P&L</p>
+                            <p id="dailyPnl" class="text-2xl font-bold text-green-600">+₹2,150</p>
+                        </div>
+                        <div class="bg-green-100 p-3 rounded-lg">
+                            <i class="fas fa-chart-line text-green-600"></i>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <span id="dailyPnlPercent" class="text-sm text-green-600">+0.66% today</span>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-6 shadow-sm card-hover">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600">Active Positions</p>
+                            <p id="activePositions" class="text-2xl font-bold text-gray-900">3</p>
+                        </div>
+                        <div class="bg-yellow-100 p-3 rounded-lg">
+                            <i class="fas fa-coins text-yellow-600"></i>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <span id="maxPositions" class="text-sm text-gray-600">Max: 5 positions</span>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-6 shadow-sm card-hover">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-600">System Status</p>
+                            <p id="tradingStatus" class="text-2xl font-bold text-green-600">Active</p>
+                        </div>
+                        <div class="bg-purple-100 p-3 rounded-lg">
+                            <i class="fas fa-robot text-purple-600"></i>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <span id="nextAction" class="text-sm text-gray-600">Monitoring markets</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Parameters Display -->
+            <div class="bg-white rounded-xl p-6 shadow-sm mb-8">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">
+                    <i class="fas fa-sliders-h mr-2 text-blue-600"></i>Current Trading Parameters
+                </h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="text-center p-4 bg-gray-50 rounded-lg">
+                        <div class="text-lg font-bold text-red-600" id="currentBuyThreshold">-1.0%</div>
+                        <div class="text-sm text-gray-600">Buy Threshold</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-50 rounded-lg">
+                        <div class="text-lg font-bold text-green-600" id="currentSellTarget">+5.0%</div>
+                        <div class="text-sm text-gray-600">Sell Target</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-50 rounded-lg">
+                        <div class="text-lg font-bold text-red-600" id="currentStopLoss">-3.0%</div>
+                        <div class="text-sm text-gray-600">Stop Loss</div>
+                    </div>
+                    <div class="text-center p-4 bg-gray-50 rounded-lg">
+                        <div class="text-lg font-bold text-blue-600" id="currentCapitalUse">50%</div>
+                        <div class="text-sm text-gray-600">Capital Use</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration Tab -->
+        <div id="content-config" class="tab-content hidden">
+            <div class="config-panel rounded-xl p-8 shadow-lg">
+                <div class="flex items-center justify-between mb-8">
+                    <h2 class="text-2xl font-bold text-gray-900">
+                        <i class="fas fa-cogs mr-3 text-blue-600"></i>Trading Parameters Configuration
+                    </h2>
+                    <div class="flex space-x-3">
+                        <button onclick="resetToDefaults()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm">
+                            <i class="fas fa-undo mr-2"></i>Reset to Defaults
+                        </button>
+                        <button onclick="saveConfiguration()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
+                            <i class="fas fa-save mr-2"></i>Save Changes
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Buy/Sell Parameters -->
+                    <div class="parameter-card rounded-xl p-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                            <i class="fas fa-chart-line mr-2 text-green-600"></i>Trading Triggers
+                        </h3>
+                        
+                        <!-- Buy Threshold -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Buy Threshold (Price Drop to Trigger Buy)
+                            </label>
+                            <div class="flex items-center space-x-4">
+                                <input type="range" id="buyThresholdSlider" class="slider flex-1" 
+                                       min="-10" max="0" step="0.1" value="-1">
+                                <div class="bg-red-100 text-red-800 px-3 py-1 rounded-lg font-mono text-sm min-w-[60px] text-center">
+                                    <span id="buyThresholdValue">-1.0%</span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Buy when price drops by this percentage from previous close</p>
+                        </div>
+
+                        <!-- Sell Target -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Sell Target (Profit Target)
+                            </label>
+                            <div class="flex items-center space-x-4">
+                                <input type="range" id="sellTargetSlider" class="slider flex-1" 
+                                       min="1" max="20" step="0.1" value="5">
+                                <div class="bg-green-100 text-green-800 px-3 py-1 rounded-lg font-mono text-sm min-w-[60px] text-center">
+                                    <span id="sellTargetValue">+5.0%</span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Sell when price increases by this percentage from purchase</p>
+                        </div>
+
+                        <!-- Stop Loss -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Stop Loss (Maximum Loss)
+                            </label>
+                            <div class="flex items-center space-x-4">
+                                <input type="range" id="stopLossSlider" class="slider flex-1" 
+                                       min="-20" max="-1" step="0.1" value="-3">
+                                <div class="bg-red-100 text-red-800 px-3 py-1 rounded-lg font-mono text-sm min-w-[60px] text-center">
+                                    <span id="stopLossValue">-3.0%</span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Cut losses when price falls by this percentage from purchase</p>
+                        </div>
+                    </div>
+
+                    <!-- Risk Management Parameters -->
+                    <div class="parameter-card rounded-xl p-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                            <i class="fas fa-shield-alt mr-2 text-red-600"></i>Risk Management
+                        </h3>
+                        
+                        <!-- Capital Allocation -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Capital Allocation (Percentage of Total Capital)
+                            </label>
+                            <div class="flex items-center space-x-4">
+                                <input type="range" id="capitalAllocationSlider" class="slider flex-1" 
+                                       min="10" max="100" step="5" value="50">
+                                <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-lg font-mono text-sm min-w-[60px] text-center">
+                                    <span id="capitalAllocationValue">50%</span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Percentage of total capital to use for trading</p>
+                        </div>
+
+                        <!-- Max Positions -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Maximum Concurrent Positions
+                            </label>
+                            <div class="flex items-center space-x-4">
+                                <input type="range" id="maxPositionsSlider" class="slider flex-1" 
+                                       min="1" max="10" step="1" value="5">
+                                <div class="bg-purple-100 text-purple-800 px-3 py-1 rounded-lg font-mono text-sm min-w-[60px] text-center">
+                                    <span id="maxPositionsValue">5</span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Maximum number of positions to hold simultaneously</p>
+                        </div>
+
+                        <!-- Daily Loss Limit -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Daily Loss Limit (Emergency Stop)
+                            </label>
+                            <div class="flex items-center space-x-4">
+                                <input type="range" id="dailyLossLimitSlider" class="slider flex-1" 
+                                       min="-50" max="-1" step="1" value="-5">
+                                <div class="bg-red-100 text-red-800 px-3 py-1 rounded-lg font-mono text-sm min-w-[60px] text-center">
+                                    <span id="dailyLossLimitValue">-5%</span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Stop all trading if daily loss exceeds this percentage</p>
+                        </div>
+
+                        <!-- Position Size Limit -->
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Maximum Position Size
+                            </label>
+                            <div class="flex items-center space-x-4">
+                                <input type="range" id="positionSizeLimitSlider" class="slider flex-1" 
+                                       min="5" max="50" step="1" value="20">
+                                <div class="bg-orange-100 text-orange-800 px-3 py-1 rounded-lg font-mono text-sm min-w-[60px] text-center">
+                                    <span id="positionSizeLimitValue">20%</span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Maximum percentage of capital per single position</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Settings -->
+                <div class="parameter-card rounded-xl p-6 mt-8">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                        <i class="fas fa-brain mr-2 text-indigo-600"></i>Advanced Settings
+                    </h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Confidence Threshold -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Minimum Signal Confidence
+                            </label>
+                            <div class="flex items-center space-x-4">
+                                <input type="range" id="confidenceThresholdSlider" class="slider flex-1" 
+                                       min="30" max="95" step="5" value="60">
+                                <div class="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-lg font-mono text-sm min-w-[60px] text-center">
+                                    <span id="confidenceThresholdValue">60%</span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Minimum confidence level required for trade execution</p>
+                        </div>
+
+                        <!-- Strategy Mode -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Trading Strategy Mode
+                            </label>
+                            <select id="strategyMode" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="conservative">Conservative (Lower Risk)</option>
+                                <option value="balanced" selected>Balanced (Medium Risk)</option>
+                                <option value="aggressive">Aggressive (Higher Risk)</option>
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">Overall risk profile for trading decisions</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuration Status -->
+                <div id="configStatus" class="mt-6 p-4 rounded-lg bg-blue-50 border border-blue-200 hidden">
+                    <div class="flex items-center">
+                        <i class="fas fa-info-circle text-blue-600 mr-2"></i>
+                        <span id="configStatusText" class="text-blue-800"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Trading Tab -->
+        <div id="content-trades" class="tab-content hidden">
+            <div class="bg-white rounded-xl p-6 shadow-sm">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">
+                    <i class="fas fa-exchange-alt mr-2 text-green-600"></i>Execute Manual Trade
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">ETF Symbol</label>
+                        <select id="tradeSymbol" class="w-full p-3 border border-gray-300 rounded-lg">
+                            <option value="NIFTYBEES">NIFTYBEES - Nifty 50 ETF</option>
+                            <option value="BANKBEES">BANKBEES - Banking ETF</option>
+                            <option value="GOLDBEES">GOLDBEES - Gold ETF</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Action</label>
+                        <select id="tradeAction" class="w-full p-3 border border-gray-300 rounded-lg">
+                            <option value="BUY">BUY - Enter Position</option>
+                            <option value="SELL">SELL - Exit Position</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mt-6">
+                    <button onclick="executeManualTrade()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg">
+                        <i class="fas fa-play mr-2"></i>Execute Trade (Demo Mode)
+                    </button>
+                    <p class="text-sm text-gray-500 mt-2">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        This will use current parameters and place a demo order
+                    </p>
+                </div>
+            </div>
+
+            <!-- Recent Trades -->
+            <div class="bg-white rounded-xl p-6 shadow-sm mt-8">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">
+                    <i class="fas fa-history mr-2 text-blue-600"></i>Recent Trades
+                </h3>
+                <div id="recentTrades" class="space-y-4">
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div>
+                            <div class="font-medium">NIFTYBEES</div>
+                            <div class="text-sm text-gray-500">BUY 100 shares at ₹158.50</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-green-600 font-medium">+₹150</div>
+                            <div class="text-sm text-gray-500">2 hours ago</div>
+                        </div>
+                    </div>
+                    <!-- More trades will be added dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let socket;
+        let currentConfig = {};
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSocket();
+            loadConfiguration();
+            setupSliderEvents();
+            updateDisplay();
+        });
+
+        // Socket.IO connection
+        function initializeSocket() {
+            socket = io();
+            
+            socket.on('connect', function() {
+                document.getElementById('connectionStatus').textContent = 'Connected';
+                document.getElementById('connectionDot').className = 'w-3 h-3 bg-green-400 rounded-full pulse-dot';
+            });
+            
+            socket.on('disconnect', function() {
+                document.getElementById('connectionStatus').textContent = 'Disconnected';
+                document.getElementById('connectionDot').className = 'w-3 h-3 bg-red-400 rounded-full';
+            });
+            
+            socket.on('config_updated', function(data) {
+                currentConfig = data.parameters;
+                updateConfigurationDisplay();
+                showConfigStatus('Configuration updated successfully!', 'success');
+            });
+            
+            socket.on('trade_executed', function(data) {
+                showConfigStatus(`Trade executed: ${data.action} ${data.symbol}`, 'success');
+                addTradeToHistory(data);
+            });
+        }
+
+        // Tab switching
+        function switchTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+                button.classList.add('text-gray-600', 'hover:text-gray-900');
+            });
+            
+            // Show selected tab content
+            document.getElementById(`content-${tabName}`).classList.remove('hidden');
+            
+            // Add active class to selected tab
+            const activeTab = document.getElementById(`tab-${tabName}`);
+            activeTab.classList.add('active');
+            activeTab.classList.remove('text-gray-600', 'hover:text-gray-900');
+        }
+
+        // Load current configuration
+        function loadConfiguration() {
+            fetch('/api/config/get')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        currentConfig = data.parameters;
+                        updateConfigurationDisplay();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading configuration:', error);
+                    showConfigStatus('Error loading configuration', 'error');
+                });
+        }
+
+        // Setup slider event listeners
+        function setupSliderEvents() {
+            const sliders = [
+                { id: 'buyThresholdSlider', valueId: 'buyThresholdValue', suffix: '%', multiplier: 1 },
+                { id: 'sellTargetSlider', valueId: 'sellTargetValue', suffix: '%', multiplier: 1, prefix: '+' },
+                { id: 'stopLossSlider', valueId: 'stopLossValue', suffix: '%', multiplier: 1 },
+                { id: 'capitalAllocationSlider', valueId: 'capitalAllocationValue', suffix: '%', multiplier: 1 },
+                { id: 'maxPositionsSlider', valueId: 'maxPositionsValue', suffix: '', multiplier: 1 },
+                { id: 'dailyLossLimitSlider', valueId: 'dailyLossLimitValue', suffix: '%', multiplier: 1 },
+                { id: 'positionSizeLimitSlider', valueId: 'positionSizeLimitValue', suffix: '%', multiplier: 1 },
+                { id: 'confidenceThresholdSlider', valueId: 'confidenceThresholdValue', suffix: '%', multiplier: 1 }
+            ];
+
+            sliders.forEach(slider => {
+                const element = document.getElementById(slider.id);
+                const valueElement = document.getElementById(slider.valueId);
+                
+                element.addEventListener('input', function() {
+                    const value = parseFloat(this.value) * slider.multiplier;
+                    const prefix = slider.prefix || '';
+                    valueElement.textContent = `${prefix}${value}${slider.suffix}`;
+                });
+            });
+        }
+
+        // Update configuration display
+        function updateConfigurationDisplay() {
+            if (!currentConfig) return;
+
+            // Update sliders
+            document.getElementById('buyThresholdSlider').value = currentConfig.buy_threshold * 100;
+            document.getElementById('sellTargetSlider').value = currentConfig.sell_target * 100;
+            document.getElementById('stopLossSlider').value = currentConfig.stop_loss * 100;
+            document.getElementById('capitalAllocationSlider').value = currentConfig.capital_allocation * 100;
+            document.getElementById('maxPositionsSlider').value = currentConfig.max_positions;
+            document.getElementById('dailyLossLimitSlider').value = currentConfig.daily_loss_limit * 100;
+            document.getElementById('positionSizeLimitSlider').value = currentConfig.position_size_limit * 100;
+            document.getElementById('confidenceThresholdSlider').value = currentConfig.confidence_threshold * 100;
+
+            // Update value displays
+            document.getElementById('buyThresholdValue').textContent = `${(currentConfig.buy_threshold * 100).toFixed(1)}%`;
+            document.getElementById('sellTargetValue').textContent = `+${(currentConfig.sell_target * 100).toFixed(1)}%`;
+            document.getElementById('stopLossValue').textContent = `${(currentConfig.stop_loss * 100).toFixed(1)}%`;
+            document.getElementById('capitalAllocationValue').textContent = `${(currentConfig.capital_allocation * 100).toFixed(0)}%`;
+            document.getElementById('maxPositionsValue').textContent = currentConfig.max_positions;
+            document.getElementById('dailyLossLimitValue').textContent = `${(currentConfig.daily_loss_limit * 100).toFixed(0)}%`;
+            document.getElementById('positionSizeLimitValue').textContent = `${(currentConfig.position_size_limit * 100).toFixed(0)}%`;
+            document.getElementById('confidenceThresholdValue').textContent = `${(currentConfig.confidence_threshold * 100).toFixed(0)}%`;
+
+            // Update dashboard display
+            document.getElementById('currentBuyThreshold').textContent = `${(currentConfig.buy_threshold * 100).toFixed(1)}%`;
+            document.getElementById('currentSellTarget').textContent = `+${(currentConfig.sell_target * 100).toFixed(1)}%`;
+            document.getElementById('currentStopLoss').textContent = `${(currentConfig.stop_loss * 100).toFixed(1)}%`;
+            document.getElementById('currentCapitalUse').textContent = `${(currentConfig.capital_allocation * 100).toFixed(0)}%`;
+        }
+
+        // Save configuration
+        function saveConfiguration() {
+            const configData = {
+                buy_threshold: parseFloat(document.getElementById('buyThresholdSlider').value) / 100,
+                sell_target: parseFloat(document.getElementById('sellTargetSlider').value) / 100,
+                stop_loss: parseFloat(document.getElementById('stopLossSlider').value) / 100,
+                capital_allocation: parseFloat(document.getElementById('capitalAllocationSlider').value) / 100,
+                max_positions: parseInt(document.getElementById('maxPositionsSlider').value),
+                daily_loss_limit: parseFloat(document.getElementById('dailyLossLimitSlider').value) / 100,
+                position_size_limit: parseFloat(document.getElementById('positionSizeLimitSlider').value) / 100,
+                confidence_threshold: parseFloat(document.getElementById('confidenceThresholdSlider').value) / 100
+            };
+
+            fetch('/api/config/update', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(configData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    currentConfig = data.parameters;
+                    showConfigStatus('Configuration saved successfully!', 'success');
+                } else {
+                    showConfigStatus(`Error: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving configuration:', error);
+                showConfigStatus('Error saving configuration', 'error');
+            });
+        }
+
+        // Reset to defaults
+        function resetToDefaults() {
+            if (confirm('Are you sure you want to reset all parameters to default values?')) {
+                fetch('/api/config/reset', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        currentConfig = data.parameters;
+                        updateConfigurationDisplay();
+                        showConfigStatus('Configuration reset to defaults!', 'success');
+                    } else {
+                        showConfigStatus(`Error: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error resetting configuration:', error);
+                    showConfigStatus('Error resetting configuration', 'error');
+                });
+            }
+        }
+
+        // Execute manual trade
+        function executeManualTrade() {
+            const symbol = document.getElementById('tradeSymbol').value;
+            const action = document.getElementById('tradeAction').value;
+            
+            // Get current price (mock data for demo)
+            const currentPrice = 158.50;
+            
+            const tradeData = {
+                symbol: symbol,
+                action: action,
+                current_price: currentPrice
+            };
+
+            fetch('/api/trade/execute', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(tradeData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showConfigStatus(`Trade executed successfully: ${action} ${symbol}`, 'success');
+                    addTradeToHistory(data.trade);
+                } else {
+                    showConfigStatus(`Trade failed: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error executing trade:', error);
+                showConfigStatus('Error executing trade', 'error');
+            });
+        }
+
+        // Show configuration status
+        function showConfigStatus(message, type) {
+            const statusDiv = document.getElementById('configStatus');
+            const statusText = document.getElementById('configStatusText');
+            
+            statusText.textContent = message;
+            statusDiv.className = `mt-6 p-4 rounded-lg border ${type === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`;
+            statusDiv.classList.remove('hidden');
+            
+            // Hide after 5 seconds
+            setTimeout(() => {
+                statusDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Add trade to history
+        function addTradeToHistory(trade) {
+            const tradesContainer = document.getElementById('recentTrades');
+            const tradeElement = document.createElement('div');
+            tradeElement.className = 'flex items-center justify-between p-4 bg-gray-50 rounded-lg';
+            
+            const pnlColor = trade.action === 'BUY' ? 'text-blue-600' : 'text-green-600';
+            const pnlText = trade.action === 'BUY' ? 'Position Opened' : '+₹' + (Math.random() * 500).toFixed(0);
+            
+            tradeElement.innerHTML = `
+                <div>
+                    <div class="font-medium">${trade.symbol}</div>
+                    <div class="text-sm text-gray-500">${trade.action} ${trade.quantity || 'N/A'} shares at ₹${trade.price}</div>
+                </div>
+                <div class="text-right">
+                    <div class="${pnlColor} font-medium">${pnlText}</div>
+                    <div class="text-sm text-gray-500">Just now</div>
+                </div>
+            `;
+            
+            tradesContainer.insertBefore(tradeElement, tradesContainer.firstChild);
+        }
+
+        // Update display data
+        function updateDisplay() {
+            // Update timestamps
+            document.getElementById('lastUpdate').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+            
+            // This would typically fetch real data from the API
+            // For now, we'll use mock data
+            setInterval(() => {
+                document.getElementById('lastUpdate').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+            }, 30000);
+        }
+    </script>
+</body>
+</html>

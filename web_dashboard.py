@@ -32,6 +32,17 @@ app = Flask(__name__, template_folder='web/templates', static_folder='web/static
 app.config['SECRET_KEY'] = 'etf_trading_dashboard_2025'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+# Global trading parameters - can be modified via dashboard
+trading_parameters = {
+    'buy_threshold': -0.01,      # -1% (Trigger buy when price drops 1%)
+    'sell_target': 0.05,         # +5% (Take profit at 5% gain)
+    'stop_loss': -0.03,          # -3% (Cut losses at 3% down)
+    'capital_allocation': 0.5,   # 50% (Use half of available capital)
+    'max_positions': 5,          # Maximum concurrent holdings
+    'daily_loss_limit': -0.05,   # -5% (Emergency stop for large losses)
+    'position_size_limit': 0.2,  # 20% (Max capital per position)
+    'confidence_threshold': 0.6   # 60% (Minimum confidence for trades)
+}
 # Global variables
 config = None
 supabase_client = None
@@ -368,7 +379,12 @@ monitor = TradingMonitor()
 # Flask Routes
 @app.route('/')
 def index():
-    """Main dashboard page"""
+    """Main dashboard page with configuration"""
+    return render_template('dashboard_config.html')
+
+@app.route('/dashboard')
+def dashboard():
+    """Alternative route for enhanced dashboard"""
     return render_template('dashboard_enhanced.html')
 
 @app.route('/api/data')
@@ -396,6 +412,275 @@ def emergency_stop():
         return jsonify({'status': 'Emergency stop triggered'})
     except Exception as e:
         return jsonify({'error': str(e)})
+
+# =================== CONFIGURATION MANAGEMENT ROUTES ===================
+
+@app.route('/api/config/get')
+def get_trading_config():
+    """Get current trading parameters"""
+    return jsonify({
+        'status': 'success',
+        'parameters': trading_parameters
+    })
+
+@app.route('/api/config/update', methods=['POST'])
+def update_trading_config():
+    """Update trading parameters"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+        
+        # Validate and update parameters
+        updates = {}
+        validation_errors = []
+        
+        # Buy threshold validation (-10% to 0%)
+        if 'buy_threshold' in data:
+            value = float(data['buy_threshold'])
+            if -0.10 <= value <= 0:
+                updates['buy_threshold'] = value
+            else:
+                validation_errors.append('Buy threshold must be between -10% and 0%')
+        
+        # Sell target validation (1% to 20%)
+        if 'sell_target' in data:
+            value = float(data['sell_target'])
+            if 0.01 <= value <= 0.20:
+                updates['sell_target'] = value
+            else:
+                validation_errors.append('Sell target must be between 1% and 20%')
+        
+        # Stop loss validation (-20% to -1%)
+        if 'stop_loss' in data:
+            value = float(data['stop_loss'])
+            if -0.20 <= value <= -0.01:
+                updates['stop_loss'] = value
+            else:
+                validation_errors.append('Stop loss must be between -20% and -1%')
+        
+        # Capital allocation validation (10% to 100%)
+        if 'capital_allocation' in data:
+            value = float(data['capital_allocation'])
+            if 0.10 <= value <= 1.0:
+                updates['capital_allocation'] = value
+            else:
+                validation_errors.append('Capital allocation must be between 10% and 100%')
+        
+        # Max positions validation (1 to 10)
+        if 'max_positions' in data:
+            value = int(data['max_positions'])
+            if 1 <= value <= 10:
+                updates['max_positions'] = value
+            else:
+                validation_errors.append('Max positions must be between 1 and 10')
+        
+        # Daily loss limit validation (-50% to -1%)
+        if 'daily_loss_limit' in data:
+            value = float(data['daily_loss_limit'])
+            if -0.50 <= value <= -0.01:
+                updates['daily_loss_limit'] = value
+            else:
+                validation_errors.append('Daily loss limit must be between -50% and -1%')
+        
+        # Position size limit validation (5% to 50%)
+        if 'position_size_limit' in data:
+            value = float(data['position_size_limit'])
+            if 0.05 <= value <= 0.50:
+                updates['position_size_limit'] = value
+            else:
+                validation_errors.append('Position size limit must be between 5% and 50%')
+        
+        # Confidence threshold validation (30% to 95%)
+        if 'confidence_threshold' in data:
+            value = float(data['confidence_threshold'])
+            if 0.30 <= value <= 0.95:
+                updates['confidence_threshold'] = value
+            else:
+                validation_errors.append('Confidence threshold must be between 30% and 95%')
+        
+        if validation_errors:
+            return jsonify({
+                'status': 'error', 
+                'message': 'Validation failed',
+                'errors': validation_errors
+            }), 400
+        
+        # Apply updates
+        old_params = trading_parameters.copy()
+        trading_parameters.update(updates)
+        
+        # Log the changes
+        logging.info(f"Trading parameters updated: {updates}")
+        
+        # Save to Supabase if available
+        if supabase_client and current_session_id:
+            try:
+                config_data = {
+                    'session_id': current_session_id,
+                    'parameters': trading_parameters,
+                    'updated_by': 'web_dashboard',
+                    'old_parameters': old_params
+                }
+                supabase_client.save_config_update(config_data)
+            except Exception as e:
+                logging.warning(f"Failed to save config to database: {e}")
+        
+        # Notify WebSocket clients of parameter change
+        socketio.emit('config_updated', {
+            'parameters': trading_parameters,
+            'updated_fields': list(updates.keys()),
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Updated {len(updates)} parameters',
+            'parameters': trading_parameters,
+            'updated_fields': list(updates.keys())
+        })
+        
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': f'Invalid number format: {str(e)}'}), 400
+    except Exception as e:
+        logging.error(f"Config update error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/config/reset', methods=['POST'])
+def reset_trading_config():
+    """Reset trading parameters to default values"""
+    try:
+        global trading_parameters
+        
+        old_params = trading_parameters.copy()
+        
+        # Reset to default values
+        trading_parameters = {
+            'buy_threshold': -0.01,      # -1%
+            'sell_target': 0.05,         # +5%
+            'stop_loss': -0.03,          # -3%
+            'capital_allocation': 0.5,   # 50%
+            'max_positions': 5,          # 5 positions
+            'daily_loss_limit': -0.05,   # -5%
+            'position_size_limit': 0.2,  # 20%
+            'confidence_threshold': 0.6   # 60%
+        }
+        
+        logging.info("Trading parameters reset to defaults")
+        
+        # Save to Supabase if available
+        if supabase_client and current_session_id:
+            try:
+                config_data = {
+                    'session_id': current_session_id,
+                    'parameters': trading_parameters,
+                    'updated_by': 'web_dashboard_reset',
+                    'old_parameters': old_params
+                }
+                supabase_client.save_config_update(config_data)
+            except Exception as e:
+                logging.warning(f"Failed to save config reset to database: {e}")
+        
+        # Notify WebSocket clients
+        socketio.emit('config_updated', {
+            'parameters': trading_parameters,
+            'reset': True,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Parameters reset to default values',
+            'parameters': trading_parameters
+        })
+        
+    except Exception as e:
+        logging.error(f"Config reset error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/trade/execute', methods=['POST'])
+def execute_trade():
+    """Execute a trade using current parameters"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'status': 'error', 'message': 'No trade data provided'}), 400
+        
+        symbol = data.get('symbol')
+        action = data.get('action')  # 'BUY' or 'SELL'
+        current_price = data.get('current_price')
+        
+        if not all([symbol, action, current_price]):
+            return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
+        
+        # Validate action
+        if action not in ['BUY', 'SELL']:
+            return jsonify({'status': 'error', 'message': 'Action must be BUY or SELL'}), 400
+        
+        # Apply trading parameters logic
+        if action == 'BUY':
+            # Check if we should buy based on parameters
+            # This is a simplified example - in real implementation, 
+            # you'd check price drops, available capital, etc.
+            
+            account_balance = trading_data.get('account_info', {}).get('total_balance', 100000)
+            available_capital = account_balance * trading_parameters['capital_allocation']
+            position_value = available_capital * trading_parameters['position_size_limit']
+            quantity = int(position_value / current_price) if current_price > 0 else 0
+            
+            if quantity == 0:
+                return jsonify({'status': 'error', 'message': 'Insufficient capital for trade'}), 400
+            
+            # In real implementation, this would place actual order via broker API
+            trade_result = {
+                'symbol': symbol,
+                'action': action,
+                'quantity': quantity,
+                'price': current_price,
+                'total_value': quantity * current_price,
+                'stop_loss_price': current_price * (1 + trading_parameters['stop_loss']),
+                'target_price': current_price * (1 + trading_parameters['sell_target']),
+                'timestamp': datetime.now().isoformat(),
+                'status': 'DEMO_ORDER'  # Since we're in demo mode
+            }
+            
+        else:  # SELL
+            # Implement sell logic based on parameters
+            trade_result = {
+                'symbol': symbol,
+                'action': action,
+                'price': current_price,
+                'timestamp': datetime.now().isoformat(),
+                'status': 'DEMO_ORDER'
+            }
+        
+        # Log the trade
+        logging.info(f"Trade executed: {trade_result}")
+        
+        # Save to Supabase if available
+        if supabase_client and current_session_id:
+            try:
+                trade_data = trade_result.copy()
+                trade_data['session_id'] = current_session_id
+                trade_data['parameters_used'] = trading_parameters
+                supabase_client.save_trade_execution(trade_data)
+            except Exception as e:
+                logging.warning(f"Failed to save trade to database: {e}")
+        
+        # Notify WebSocket clients
+        socketio.emit('trade_executed', trade_result)
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Trade executed successfully',
+            'trade': trade_result
+        })
+        
+    except Exception as e:
+        logging.error(f"Trade execution error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # SocketIO Events
 @socketio.on('connect')

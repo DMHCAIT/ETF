@@ -210,3 +210,4 @@ Thumbs.db
 
 # Docker
 .dockerignore
+.vercel
