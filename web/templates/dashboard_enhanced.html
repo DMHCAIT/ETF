@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETF Trading Dashboard - Live Market Data</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%);
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .price-up {
+            color: #10b981;
+            background-color: rgba(16, 185, 129, 0.1);
+        }
+        .price-down {
+            color: #ef4444;
+            background-color: rgba(239, 68, 68, 0.1);
+        }
+        .price-neutral {
+            color: #6b7280;
+            background-color: rgba(107, 114, 128, 0.1);
+        }
+        .ticker-scroll {
+            animation: scroll 30s linear infinite;
+        }
+        @keyframes scroll {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    
+    <!-- Live Ticker Bar -->
+    <div class="bg-gray-900 text-white py-2 overflow-hidden">
+        <div id="tickerScroll" class="ticker-scroll whitespace-nowrap text-sm">
+            <span id="tickerContent">Loading live market data...</span>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="gradient-header text-white shadow-xl">
+        <div class="container mx-auto px-6 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="bg-white bg-opacity-20 p-3 rounded-lg">
+                        <i class="fas fa-chart-line text-2xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-bold">ETF Trading Dashboard</h1>
+                        <p class="text-blue-100">Live Market Data & Real-time Monitoring</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-8">
+                    <!-- Market Status -->
+                    <div class="text-center">
+                        <div id="marketStatus" class="text-lg font-bold">Market Closed</div>
+                        <div id="marketTime" class="text-xs text-blue-200">Next: Tomorrow 09:15 IST</div>
+                    </div>
+                    
+                    <!-- Connection Status -->
+                    <div class="flex items-center space-x-2">
+                        <div id="connectionDot" class="w-3 h-3 bg-green-400 rounded-full pulse-dot"></div>
+                        <span id="connectionStatus" class="text-sm">Connected</span>
+                    </div>
+                    
+                    <!-- Controls -->
+                    <div class="flex space-x-3">
+                        <button onclick="refreshData()" class="bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg text-sm transition-all">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh
+                        </button>
+                        <button onclick="emergencyStop()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-semibold transition-all">
+                            <i class="fas fa-stop mr-2"></i>Emergency Stop
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-8">
+        
+        <!-- Account Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Account Balance</p>
+                        <p id="accountBalance" class="text-2xl font-bold text-gray-900">₹0</p>
+                    </div>
+                    <div class="bg-blue-100 p-3 rounded-lg">
+                        <i class="fas fa-wallet text-blue-600"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Portfolio Value</p>
+                        <p id="portfolioValue" class="text-2xl font-bold text-gray-900">₹0</p>
+                    </div>
+                    <div class="bg-green-100 p-3 rounded-lg">
+                        <i class="fas fa-chart-pie text-green-600"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Daily P&L</p>
+                        <p id="dailyPnL" class="text-2xl font-bold">₹0</p>
+                    </div>
+                    <div class="bg-yellow-100 p-3 rounded-lg">
+                        <i class="fas fa-trending-up text-yellow-600"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-gray-600">Active Positions</p>
+                        <p id="activePositions" class="text-2xl font-bold text-gray-900">0</p>
+                    </div>
+                    <div class="bg-purple-100 p-3 rounded-lg">
+                        <i class="fas fa-layer-group text-purple-600"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ETF Market Data Grid -->
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-8">
+            <div class="bg-gray-50 px-6 py-4 border-b">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-bold text-gray-900">
+                        <i class="fas fa-chart-bar mr-2 text-blue-600"></i>
+                        Live ETF Market Data
+                    </h2>
+                    <div class="flex items-center space-x-4">
+                        <span id="lastUpdate" class="text-sm text-gray-500">Last updated: --</span>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full pulse-dot"></div>
+                            <span class="text-sm text-gray-600">Live</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="px-6 py-4 text-left text-sm font-semibold text-gray-700">Symbol</th>
+                            <th class="px-6 py-4 text-right text-sm font-semibold text-gray-700">Last Price</th>
+                            <th class="px-6 py-4 text-right text-sm font-semibold text-gray-700">Change</th>
+                            <th class="px-6 py-4 text-right text-sm font-semibold text-gray-700">Change %</th>
+                            <th class="px-6 py-4 text-right text-sm font-semibold text-gray-700">Volume</th>
+                            <th class="px-6 py-4 text-right text-sm font-semibold text-gray-700">High</th>
+                            <th class="px-6 py-4 text-right text-sm font-semibold text-gray-700">Low</th>
+                            <th class="px-6 py-4 text-center text-sm font-semibold text-gray-700">Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="etfTableBody" class="divide-y divide-gray-200">
+                        <!-- ETF data will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Positions & Risk Management -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            <!-- Current Positions -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div class="bg-gray-50 px-6 py-4 border-b">
+                    <h3 class="text-lg font-bold text-gray-900">
+                        <i class="fas fa-briefcase mr-2 text-green-600"></i>
+                        Current Positions
+                    </h3>
+                </div>
+                <div class="p-6">
+                    <div id="positionsContainer">
+                        <p class="text-gray-500 text-center py-8">No active positions</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Risk Metrics -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div class="bg-gray-50 px-6 py-4 border-b">
+                    <h3 class="text-lg font-bold text-gray-900">
+                        <i class="fas fa-shield-alt mr-2 text-red-600"></i>
+                        Risk Management
+                    </h3>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Margin Utilization</span>
+                        <span id="marginUtil" class="font-semibold">0%</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Daily P&L %</span>
+                        <span id="dailyPnLPercent" class="font-semibold">0%</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Risk Level</span>
+                        <span id="riskLevel" class="px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800">LOW</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Max Daily Loss Limit</span>
+                        <span class="font-semibold text-red-600">-5%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // WebSocket connection
+        const socket = io();
+        let lastData = null;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 ETF Trading Dashboard initialized');
+            loadInitialData();
+        });
+
+        // WebSocket events
+        socket.on('connect', function() {
+            console.log('✅ Connected to dashboard');
+            document.getElementById('connectionDot').className = 'w-3 h-3 bg-green-400 rounded-full pulse-dot';
+            document.getElementById('connectionStatus').textContent = 'Connected';
+        });
+
+        socket.on('disconnect', function() {
+            console.log('❌ Disconnected from dashboard');
+            document.getElementById('connectionDot').className = 'w-3 h-3 bg-red-400 rounded-full pulse-dot';
+            document.getElementById('connectionStatus').textContent = 'Disconnected';
+        });
+
+        socket.on('data_update', function(data) {
+            console.log('📊 Received data update');
+            updateDashboard(data);
+        });
+
+        // Load initial data
+        async function loadInitialData() {
+            try {
+                const response = await fetch('/api/data');
+                const data = await response.json();
+                updateDashboard(data);
+            } catch (error) {
+                console.error('Failed to load initial data:', error);
+            }
+        }
+
+        // Update dashboard with new data
+        function updateDashboard(data) {
+            lastData = data;
+            
+            // Update account summary
+            updateAccountSummary(data);
+            
+            // Update ETF market data
+            updateETFTable(data.market_data || {});
+            
+            // Update positions
+            updatePositions(data.positions || []);
+            
+            // Update risk metrics
+            updateRiskMetrics(data.risk_metrics || {});
+            
+            // Update ticker
+            updateTicker(data.market_data || {});
+            
+            // Update last update time
+            document.getElementById('lastUpdate').textContent = 
+                'Last updated: ' + new Date().toLocaleTimeString();
+        }
+
+        // Update account summary cards
+        function updateAccountSummary(data) {
+            const accountInfo = data.account_info || {};
+            
+            document.getElementById('accountBalance').textContent = 
+                formatCurrency(accountInfo.total_balance || 0);
+            document.getElementById('portfolioValue').textContent = 
+                formatCurrency(data.portfolio_value || 0);
+            
+            const dailyPnL = data.daily_pnl || 0;
+            const pnlElement = document.getElementById('dailyPnL');
+            pnlElement.textContent = formatCurrency(dailyPnL);
+            pnlElement.className = `text-2xl font-bold ${dailyPnL >= 0 ? 'text-green-600' : 'text-red-600'}`;
+            
+            document.getElementById('activePositions').textContent = 
+                (data.positions || []).length;
+        }
+
+        // Update ETF market data table
+        function updateETFTable(marketData) {
+            const tbody = document.getElementById('etfTableBody');
+            tbody.innerHTML = '';
+
+            if (!marketData || Object.keys(marketData).length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-gray-500">No market data available</td></tr>';
+                return;
+            }
+
+            Object.entries(marketData).forEach(([symbol, data]) => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 transition-colors';
+                
+                const changePercent = data.change_percent || 0;
+                const priceClass = changePercent > 0 ? 'price-up' : changePercent < 0 ? 'price-down' : 'price-neutral';
+                
+                row.innerHTML = `
+                    <td class="px-6 py-4">
+                        <div class="font-semibold text-gray-900">${symbol}</div>
+                        <div class="text-xs text-gray-500">NSE</div>
+                    </td>
+                    <td class="px-6 py-4 text-right font-semibold">₹${(data.price || 0).toFixed(2)}</td>
+                    <td class="px-6 py-4 text-right">
+                        <span class="px-2 py-1 rounded text-sm font-medium ${priceClass}">
+                            ${(data.change || 0) >= 0 ? '+' : ''}${(data.change || 0).toFixed(2)}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <span class="px-2 py-1 rounded text-sm font-medium ${priceClass}">
+                            ${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-right text-gray-600">${formatNumber(data.volume || 0)}</td>
+                    <td class="px-6 py-4 text-right text-gray-600">₹${(data.high || 0).toFixed(2)}</td>
+                    <td class="px-6 py-4 text-right text-gray-600">₹${(data.low || 0).toFixed(2)}</td>
+                    <td class="px-6 py-4 text-center text-xs text-gray-500">${data.timestamp || '--'}</td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+
+        // Update ticker scroll
+        function updateTicker(marketData) {
+            const tickerContent = document.getElementById('tickerContent');
+            
+            if (!marketData || Object.keys(marketData).length === 0) {
+                tickerContent.textContent = 'Market data not available | Check connection';
+                return;
+            }
+            
+            const tickerItems = Object.entries(marketData).map(([symbol, data]) => {
+                const change = data.change || 0;
+                const changePercent = data.change_percent || 0;
+                const arrow = change >= 0 ? '↗' : '↘';
+                const color = change >= 0 ? 'text-green-400' : 'text-red-400';
+                
+                return `<span class="mr-8"><strong>${symbol}</strong> ₹${(data.price || 0).toFixed(2)} <span class="${color}">${arrow} ${changePercent.toFixed(2)}%</span></span>`;
+            }).join('');
+            
+            tickerContent.innerHTML = tickerItems;
+        }
+
+        // Update positions
+        function updatePositions(positions) {
+            const container = document.getElementById('positionsContainer');
+            
+            if (!positions || positions.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-8">No active positions</p>';
+                return;
+            }
+            
+            container.innerHTML = positions.map(position => {
+                const pnl = position.pnl || 0;
+                const pnlClass = pnl >= 0 ? 'text-green-600' : 'text-red-600';
+                
+                return `
+                    <div class="border-b last:border-b-0 py-4">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="font-semibold">${position.tradingsymbol || 'N/A'}</div>
+                                <div class="text-sm text-gray-500">Qty: ${position.quantity || 0}</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-semibold">₹${(position.last_price || 0).toFixed(2)}</div>
+                                <div class="text-sm ${pnlClass}">${formatCurrency(pnl)}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Update risk metrics
+        function updateRiskMetrics(riskMetrics) {
+            document.getElementById('marginUtil').textContent = 
+                (riskMetrics.margin_utilization || 0).toFixed(1) + '%';
+            
+            const dailyPnLPercent = riskMetrics.daily_pnl_percent || 0;
+            const pnlPercentElement = document.getElementById('dailyPnLPercent');
+            pnlPercentElement.textContent = dailyPnLPercent.toFixed(2) + '%';
+            pnlPercentElement.className = `font-semibold ${dailyPnLPercent >= 0 ? 'text-green-600' : 'text-red-600'}`;
+            
+            const riskLevel = riskMetrics.risk_level || 'LOW';
+            const riskElement = document.getElementById('riskLevel');
+            riskElement.textContent = riskLevel;
+            
+            const riskColors = {
+                'LOW': 'bg-green-100 text-green-800',
+                'MEDIUM': 'bg-yellow-100 text-yellow-800',
+                'HIGH': 'bg-red-100 text-red-800'
+            };
+            riskElement.className = `px-3 py-1 rounded-full text-sm font-semibold ${riskColors[riskLevel] || riskColors.LOW}`;
+        }
+
+        // Utility functions
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-IN', {
+                style: 'currency',
+                currency: 'INR',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            }).format(amount || 0);
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        // Control functions
+        function refreshData() {
+            console.log('🔄 Refreshing data...');
+            loadInitialData();
+        }
+
+        function emergencyStop() {
+            if (confirm('Are you sure you want to execute an emergency stop? This will halt all trading activities.')) {
+                fetch('/api/emergency_stop', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        alert('Emergency stop executed: ' + data.status);
+                    })
+                    .catch(error => {
+                        alert('Failed to execute emergency stop: ' + error);
+                    });
+            }
+        }
+
+        // Auto-refresh every 5 seconds if not connected via WebSocket
+        setInterval(() => {
+            if (!socket.connected) {
+                console.log('📡 WebSocket disconnected, refreshing data via HTTP...');
+                loadInitialData();
+            }
+        }, 5000);
+    </script>
+</body>
+</html>
