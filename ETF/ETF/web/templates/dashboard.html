@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETF Trading Dashboard</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <i class="fas fa-chart-line text-3xl"></i>
+                    <div>
+                        <h1 class="text-2xl font-bold">ETF Trading Dashboard</h1>
+                        <p class="text-blue-100 text-sm">Real-time monitoring & control</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-6">
+                    <!-- Connection Status -->
+                    <div class="flex items-center space-x-2">
+                        <div id="connectionDot" class="w-3 h-3 bg-green-400 rounded-full pulse-dot"></div>
+                        <span id="connectionStatus" class="text-sm">Connected</span>
+                    </div>
+                    
+                    <!-- System Status -->
+                    <div class="text-right">
+                        <div class="text-sm text-blue-100">System Status</div>
+                        <div id="systemStatus" class="font-semibold">Initializing...</div>
+                    </div>
+                    
+                    <!-- Last Update -->
+                    <div class="text-right">
+                        <div class="text-sm text-blue-100">Last Update</div>
+                        <div id="lastUpdate" class="font-semibold text-sm">--:--:--</div>
+                    </div>
+                    
+                    <!-- Emergency Stop -->
+                    <button id="emergencyStopBtn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-semibold transition-colors duration-200">
+                        <i class="fas fa-stop-circle mr-2"></i>Emergency Stop
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard -->
+    <main class="container mx-auto px-6 py-8">
+        <!-- Quick Stats Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Portfolio Value -->
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm">Portfolio Value</p>
+                        <p id="portfolioValue" class="text-2xl font-bold text-gray-900">₹0.00</p>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-wallet text-blue-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily P&L -->
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm">Daily P&L</p>
+                        <p id="dailyPnL" class="text-2xl font-bold">₹0.00</p>
+                    </div>
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-chart-line text-green-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Positions -->
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm">Active Positions</p>
+                        <p id="activePositions" class="text-2xl font-bold text-gray-900">0</p>
+                    </div>
+                    <div class="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-list text-yellow-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Account Balance -->
+            <div class="bg-white rounded-xl shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-600 text-sm">Available Cash</p>
+                        <p id="availableCash" class="text-2xl font-bold text-gray-900">₹0.00</p>
+                    </div>
+                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-money-bill-wave text-purple-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Account Information -->
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-user-circle mr-2 text-blue-600"></i>Account Information
+                </h2>
+                <div class="space-y-3">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">User Name:</span>
+                        <span id="userName" class="font-semibold">Loading...</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">User ID:</span>
+                        <span id="userId" class="font-semibold">Loading...</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Total Balance:</span>
+                        <span id="totalBalance" class="font-semibold text-green-600">₹0.00</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Used Margin:</span>
+                        <span id="usedMargin" class="font-semibold text-red-600">₹0.00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Risk Metrics -->
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-shield-alt mr-2 text-green-600"></i>Risk Management
+                </h2>
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <span class="text-gray-600">Margin Utilization</span>
+                            <span id="marginUtil" class="font-semibold">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="marginUtilBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <span class="text-gray-600">Daily P&L %</span>
+                            <span id="dailyPnLPercent" class="font-semibold">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="dailyPnLBar" class="h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Risk Level:</span>
+                        <span id="riskLevel" class="font-semibold px-3 py-1 rounded-full text-sm">LOW</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Market Data & Positions -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+            <!-- Market Data -->
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-chart-bar mr-2 text-blue-600"></i>Market Data
+                </h2>
+                <div id="marketDataContainer" class="space-y-3">
+                    <!-- Market data will be populated here -->
+                </div>
+            </div>
+
+            <!-- Positions -->
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-coins mr-2 text-yellow-600"></i>Current Positions
+                </h2>
+                <div id="positionsContainer" class="space-y-3">
+                    <!-- Positions will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ML Predictions -->
+        <div class="bg-white rounded-xl shadow-md p-6 mt-8">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                <i class="fas fa-robot mr-2 text-purple-600"></i>ML Predictions
+            </h2>
+            <div id="mlPredictionsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- ML predictions will be populated here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- JavaScript -->
+    <script>
+        let socket;
+        let data = {};
+
+        // Initialize WebSocket connection
+        function initializeWebSocket() {
+            socket = io();
+            
+            socket.on('connect', function() {
+                console.log('Connected to dashboard');
+                updateConnectionStatus(true);
+            });
+
+            socket.on('disconnect', function() {
+                console.log('Disconnected from dashboard');
+                updateConnectionStatus(false);
+            });
+
+            socket.on('data_update', function(newData) {
+                console.log('Received data update');
+                data = newData;
+                updateDashboard();
+            });
+        }
+
+        // Update connection status
+        function updateConnectionStatus(connected) {
+            const dot = document.getElementById('connectionDot');
+            const status = document.getElementById('connectionStatus');
+            
+            if (connected) {
+                dot.className = 'w-3 h-3 bg-green-400 rounded-full pulse-dot';
+                status.textContent = 'Connected';
+            } else {
+                dot.className = 'w-3 h-3 bg-red-400 rounded-full';
+                status.textContent = 'Disconnected';
+            }
+        }
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-IN', {
+                style: 'currency',
+                currency: 'INR',
+                minimumFractionDigits: 2
+            }).format(amount);
+        }
+
+        // Format percentage
+        function formatPercentage(value) {
+            return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+        }
+
+        // Update dashboard with new data
+        function updateDashboard() {
+            // Update last update time
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            
+            // Update system status
+            document.getElementById('systemStatus').textContent = data.system_status || 'Unknown';
+            
+            // Update quick stats
+            document.getElementById('portfolioValue').textContent = formatCurrency(data.portfolio_value || 0);
+            document.getElementById('dailyPnL').textContent = formatCurrency(data.daily_pnl || 0);
+            document.getElementById('activePositions').textContent = (data.positions || []).length;
+            document.getElementById('availableCash').textContent = formatCurrency(data.account_info?.available_cash || 0);
+            
+            // Update P&L color
+            const pnlElement = document.getElementById('dailyPnL');
+            const pnl = data.daily_pnl || 0;
+            pnlElement.className = `text-2xl font-bold ${pnl >= 0 ? 'text-green-600' : 'text-red-600'}`;
+            
+            // Update account info
+            const accountInfo = data.account_info || {};
+            document.getElementById('userName').textContent = accountInfo.user_name || 'N/A';
+            document.getElementById('userId').textContent = accountInfo.user_id || 'N/A';
+            document.getElementById('totalBalance').textContent = formatCurrency(accountInfo.total_balance || 0);
+            document.getElementById('usedMargin').textContent = formatCurrency(accountInfo.used_margin || 0);
+            
+            // Update risk metrics
+            const riskMetrics = data.risk_metrics || {};
+            const marginUtil = riskMetrics.margin_utilization || 0;
+            const dailyPnLPercent = riskMetrics.daily_pnl_percent || 0;
+            const riskLevel = riskMetrics.risk_level || 'LOW';
+            
+            document.getElementById('marginUtil').textContent = `${marginUtil.toFixed(1)}%`;
+            document.getElementById('marginUtilBar').style.width = `${Math.min(marginUtil, 100)}%`;
+            
+            document.getElementById('dailyPnLPercent').textContent = formatPercentage(dailyPnLPercent);
+            const pnlBar = document.getElementById('dailyPnLBar');
+            pnlBar.style.width = `${Math.min(Math.abs(dailyPnLPercent) * 10, 100)}%`;
+            pnlBar.className = `h-2 rounded-full transition-all duration-300 ${dailyPnLPercent >= 0 ? 'bg-green-500' : 'bg-red-500'}`;
+            
+            const riskLevelElement = document.getElementById('riskLevel');
+            riskLevelElement.textContent = riskLevel;
+            riskLevelElement.className = `font-semibold px-3 py-1 rounded-full text-sm ${
+                riskLevel === 'LOW' ? 'bg-green-100 text-green-800' :
+                riskLevel === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
+                'bg-red-100 text-red-800'
+            }`;
+            
+            // Update market data
+            updateMarketData();
+            
+            // Update positions
+            updatePositions();
+            
+            // Update ML predictions
+            updateMLPredictions();
+        }
+
+        // Update market data
+        function updateMarketData() {
+            const container = document.getElementById('marketDataContainer');
+            const marketData = data.market_data || {};
+            
+            if (Object.keys(marketData).length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center">No market data available</p>';
+                return;
+            }
+            
+            container.innerHTML = Object.entries(marketData).map(([symbol, marketInfo]) => `
+                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <div>
+                        <div class="font-semibold">${symbol}</div>
+                        <div class="text-2xl font-bold">${formatCurrency(marketInfo.price || 0)}</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-sm ${(marketInfo.change || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">
+                            ${formatPercentage(marketInfo.change_percent || 0)}
+                        </div>
+                        <div class="text-xs ${(marketInfo.change || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">
+                            ${(marketInfo.change || 0) >= 0 ? '+' : ''}${(marketInfo.change || 0).toFixed(2)}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Update positions
+        function updatePositions() {
+            const container = document.getElementById('positionsContainer');
+            const positions = data.positions || [];
+            
+            if (positions.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center">No active positions</p>';
+                return;
+            }
+            
+            container.innerHTML = positions.slice(0, 5).map(position => `
+                <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                    <div>
+                        <div class="font-semibold">${position.tradingsymbol || 'N/A'}</div>
+                        <div class="text-sm text-gray-600">Qty: ${position.quantity || 0}</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-semibold ${(position.pnl || 0) >= 0 ? 'text-green-600' : 'text-red-600'}">
+                            ${formatCurrency(position.pnl || 0)}
+                        </div>
+                        <div class="text-sm text-gray-600">${formatCurrency(position.last_price || 0)}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Update ML predictions
+        function updateMLPredictions() {
+            const container = document.getElementById('mlPredictionsContainer');
+            const predictions = data.ml_predictions || {};
+            
+            if (Object.keys(predictions).length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center col-span-full">No ML predictions available</p>';
+                return;
+            }
+            
+            container.innerHTML = Object.entries(predictions).map(([symbol, prediction]) => `
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <div class="font-semibold mb-2">${symbol}</div>
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-sm">Prediction:</span>
+                            <span class="font-semibold ${
+                                prediction.prediction === 'BUY' ? 'text-green-600' :
+                                prediction.prediction === 'SELL' ? 'text-red-600' : 'text-yellow-600'
+                            }">${prediction.prediction || 'N/A'}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm">Confidence:</span>
+                            <span class="font-semibold">${prediction.confidence || 0}%</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm">Target:</span>
+                            <span class="font-semibold">${formatCurrency(prediction.target_price || 0)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Emergency stop
+        document.getElementById('emergencyStopBtn').addEventListener('click', function() {
+            if (confirm('Are you sure you want to execute an emergency stop? This will halt all trading activities.')) {
+                fetch('/api/emergency_stop', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        alert('Emergency stop executed: ' + data.status);
+                    })
+                    .catch(error => {
+                        alert('Failed to execute emergency stop: ' + error);
+                    });
+            }
+        });
+
+        // Fetch initial data
+        function fetchInitialData() {
+            fetch('/api/data')
+                .then(response => response.json())
+                .then(newData => {
+                    data = newData;
+                    updateDashboard();
+                })
+                .catch(error => {
+                    console.error('Failed to fetch initial data:', error);
+                });
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeWebSocket();
+            fetchInitialData();
+            
+            // Periodic data refresh as fallback
+            setInterval(fetchInitialData, 30000); // Every 30 seconds
+        });
+    </script>
+</body>
+</html>
